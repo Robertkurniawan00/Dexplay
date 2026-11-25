@@ -1,67 +1,63 @@
-# Dexplay — Desktop Dynamic Music Island & Audio Player
+# Dexplay
 
-<div align="center">
+A native Windows desktop audio player and dynamic island widget built with C# (.NET / Win32 / GDI+) and Windows Media Foundation.
 
-**Standalone Native Windows Desktop Application (`Dexplay.exe`)**  
-*Direct Win32 / GDI+ / Windows Media Foundation • Graphic Equalizer • YouTube Music Official Audio • LRCLIB Synced Lyrics • 5 Themes*
+## Overview
 
-[![Windows](https://img.shields.io/badge/Platform-100%25%20Pure%20Windows%20Widget-0078D6.svg)](#)
-[![C# .NET](https://img.shields.io/badge/Core-C%23%20%2F%20Win32%20API-512BD4.svg)](#)
-[![C Standard](https://img.shields.io/badge/DSP-C99%20DLL-00599C.svg)](#)
-[![C++ Standard](https://img.shields.io/badge/Probe-C%2B%2B20%20Binary-004482.svg)](#)
+Dexplay is a lightweight desktop music player that runs as a standalone Windows process without web runtimes, browser engines, or background web servers. It features a compact, top-anchored notch/island interface that expands into a full control deck.
 
-</div>
-
----
-
-## 🌟 100% Pure Native Windows Desktop Music Island
-
-**Dexplay** ([Dexplay.exe](file:///d:/MUSIC%20WIDGET/Dexplay.exe)) adalah aplikasi pemutar musik desktop native Windows berkecepatan tinggi:
-- **Bukan Web App**: Zero Electron, zero browser, tidak memakan resource RAM berlebih (<35 MB).
-- **Tanpa Web Server**: Tidak memerlukan localhost, Node daemon, atau port HTTP.
-- **Eksekusi Biner Mandiri**: Berjalan langsung sebagai proses Windows native dengan Windows Media Foundation (`PresentationCore` / `MediaPlayer`).
-- **Direct P/Invoke & Native Integration**: Memanggil DLL C99 (`title_cleaner.dll`) secara biner langsung dan binary C++20 (`audio_probe.exe`) untuk inspeksi audio lokal.
+### Technical Characteristics
+- **Pure Native Execution**: Built using Win32 APIs, GDI+ vector rendering, and Windows Media Foundation (`MediaPlayer`).
+- **Low Memory Footprint**: Typical working set memory remains under 35 MB.
+- **Native Interop**: Direct P/Invoke integration with C99 (`title_cleaner.dll`) and a C++20 inspection utility (`audio_probe.exe`).
+- **DASH M4A Fixer**: Built-in container parser that repairs YouTube DASH `edts` atom offsets on fragmented audio streams for smooth seeking.
 
 ---
 
-## 🔍 Fitur Utama Dexplay
+## Features
 
-1. **Dual-State Dynamic Notch & Island**:
-   - **Collapsed Notch Bar (460x46 px)** & **Floating Island Mode**: Tombol vektor GDI+ anti-aliased (Play, Pause, Search, Expand, Island, Pin, Close) dan mini equalizer indicator.
-   - **Expanded Command Deck (550x450 px)** dengan 5 tab:
-     - **DECK**: Visualizer 4-mode (*Spectrum*, *Stereo Mirror*, *Oscilloscope*, *Dot Matrix*), vinyl spinning disc interaktif, scrub bar dengan real-time live preview saat dragging, loop, volume + mute.
-     - **YT MUSIC**: Pencarian lagu YouTube Music khusus **Official Audio** (memprioritaskan channel `- Topic` & label resmi, menyaring MV, fancam, live broadcast, kompilasi, karaoke, cover, dan spam `#`), dengan dukungan penuh Unicode (Hangul/Kanji/Latin).
-     - **LIRIK**: Lirik tersinkronisasi LRCLIB dengan auto-scroll dan *click-to-seek*.
-     - **QUEUE**: Antrean lagu interaktif dengan tombol pindah urutan, hapus, dan play.
-     - **EQUALIZER**: 
-       - **5-Band Graphic Equalizer** (60Hz Sub-Bass, 250Hz Bass, 1kHz Mid, 4kHz Presence, 12kHz Treble) dengan rentang -12 dB s/d +12 dB.
-       - **Equalizer Presets**: *Flat*, *Bass Boost*, *Vocal Clarity*, *Treble Booster*, *Rock & Metal*, *Electronic/EDM*, *Pop & R&B*, *Lo-Fi Chill*, serta *Kustom*.
-       - **Bass Boost Switch** (+6 dB acoustic boost).
-       - **Tempo / Playback Speed** (0.5x s/d 1.5x) dengan tombol reset 100%.
-       - **Pilihan Skin Tema Widget (Full Width 506px)**: 5 tema resmi (*Cyber Neon*, *Sunset Glow*, *Emerald Night*, *Cyberpunk 2077*, *Minimalist Monochrome*).
+### Interface Modes
+- **Compact Notch / Floating Island (460 × 46 px)**:
+  - Top-anchored or draggable floating island.
+  - GDI+ vector controls: Play/Pause, Search, Deck toggle, Pin, and Close.
+  - Real-time mini equalizer bar indicator.
+- **Expanded Command Deck (550 × 450 px)**:
+  - **Deck**: Visualizer (Spectrum, Stereo Mirror, Oscilloscope, Dot Matrix), rotating vinyl art, scrub bar with drag preview, repeat modes, and volume control.
+  - **Search**: YouTube Music query engine filtered for official audio releases (`- Topic` and verified label channels).
+  - **Lyrics**: Synced lyrics via LRCLIB with auto-scroll and click-to-seek.
+  - **Queue**: Reorderable playback queue.
+  - **Equalizer**: 5-band graphic equalizer (60Hz, 250Hz, 1kHz, 4kHz, 12kHz), acoustic bass boost, playback speed control (0.5x – 1.5x), and 5 UI themes.
 
-2. **DASH M4A Container Sanitizer (`SanitizeM4aEdts`)**:
-   - Algoritma pembersih container MP4 berbasis C# murni yang secara otomatis memperbaiki atom `edts` YouTube pada file fragmented MP4, menjamin lagu dapat diputar mulus dan di-*seek* ke menit berapa pun tanpa error.
-
-3. **Global Windows Hotkeys**:
-   - `Ctrl + Alt + Space`: Play / Pause
-   - `Ctrl + Alt + Right`: Next Track
-   - `Ctrl + Alt + Left`: Previous Track
-   - `Ctrl + Alt + E`: Buka Tab Equalizer
-   - `Ctrl + Alt + T`: Ganti Tema / Skin
-   - `Ctrl + Alt + B`: Toggle Bass Boost
-   - `Ctrl + Alt + Up / Down`: Atur Volume
+### Global Shortcuts
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl + Alt + Space` | Play / Pause |
+| `Ctrl + Alt + Right` | Next Track |
+| `Ctrl + Alt + Left` | Previous Track |
+| `Ctrl + Alt + Up` / `Down` | Adjust Volume |
+| `Ctrl + Alt + E` | Open Equalizer |
+| `Ctrl + Alt + T` | Cycle Themes |
+| `Ctrl + Alt + B` | Toggle Bass Boost |
 
 ---
 
-## 🛠️ Cara Menjalankan & Membangun
+## Getting Started
 
-### Menjalankan Widget:
-Cukup klik dua kali berkas:
-- **`Dexplay.exe`** atau jalankan script **`scripts\Launch_Widget.ps1`**
+### Running the Application
+Launch the precompiled executable directly:
+```cmd
+Dexplay.exe
+```
+Or launch using PowerShell:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\Launch_Widget.ps1
+```
 
-### Mengompilasi Ulang Biner (Standalone C# Compiler):
+### Building from Source
+Prerequisites: Windows 10/11 (uses built-in .NET Framework `csc.exe`).
+
+Run the build script:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build_pure_widget.ps1
 ```
-Hasil kompilasi berupa biner mandiri `Dexplay.exe` berukuran ~98 KB tanpa dependensi eksternal.
+The script compiles `src\Dexplay.cs` directly into `Dexplay.exe`.

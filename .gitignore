@@ -1,0 +1,11 @@
+# Runtime & User Config
+settings.json
+widget_error.log
+*.log
+*.tmp
+
+# Build artifacts (optional: keep Dexplay.exe or ignore intermediate)
+*.pdb
+*.obj
+*.o
+test_run.exe

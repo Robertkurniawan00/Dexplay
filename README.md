@@ -58,10 +58,10 @@
 
 ### Menjalankan Widget:
 Cukup klik dua kali berkas:
-- **`Launch_Widget.bat`** atau **`Dexplay.exe`**
+- **`Dexplay.exe`** atau jalankan script **`scripts\Launch_Widget.ps1`**
 
 ### Mengompilasi Ulang Biner (Standalone C# Compiler):
 ```powershell
-powershell -ExecutionPolicy Bypass -File build_pure_widget.ps1
+powershell -ExecutionPolicy Bypass -File scripts\build_pure_widget.ps1
 ```
 Hasil kompilasi berupa biner mandiri `Dexplay.exe` berukuran ~98 KB tanpa dependensi eksternal.

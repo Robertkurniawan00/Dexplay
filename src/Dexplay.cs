@@ -1064,59 +1064,42 @@ namespace Dexplay
 
         private void DrawSpectrumBars(Graphics g, int w, int h)
         {
+            if (w <= 0 || h <= 0) return;
             float spacing = (float)w / _bars.Length;
             float barW = Math.Max(2.5f, spacing - 3f);
 
-            for (int i = 0; i < _bars.Length; i++)
+            using (System.Drawing.Drawing2D.LinearGradientBrush brush = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, 0, w, h), SecondaryColor, AccentColor, 90f))
+            using (SolidBrush capBrush = new SolidBrush(SecondaryColor))
             {
-                float bh = Math.Min(h - 2, Math.Max(4f, _bars[i]));
-                float bx = i * spacing + (spacing - barW) / 2f;
-                float by = h - bh;
-
-                using (System.Drawing.Drawing2D.LinearGradientBrush brush = new System.Drawing.Drawing2D.LinearGradientBrush(new PointF(bx, by), new PointF(bx, h), SecondaryColor, AccentColor))
+                for (int i = 0; i < _bars.Length; i++)
                 {
+                    float bh = Math.Min(h - 2, Math.Max(4f, _bars[i]));
+                    float bx = i * spacing + (spacing - barW) / 2f;
+                    float by = h - bh;
                     g.FillRectangle(brush, bx, by, barW, bh);
-                }
-
-                // Glowing Peak Cap
-                using (SolidBrush capBrush = new SolidBrush(SecondaryColor))
-                {
                     g.FillRectangle(capBrush, bx, Math.Max(0, by - 2f), barW, 1.5f);
                 }
             }
-
-
         }
 
         private void DrawStereoMirror(Graphics g, int w, int h)
         {
+            if (w <= 0 || h <= 0) return;
             float cy = h / 2f;
             float spacing = (float)w / _bars.Length;
             float barW = Math.Max(2.5f, spacing - 3f);
 
-            for (int i = 0; i < _bars.Length; i++)
-            {
-                float halfH = Math.Min(cy - 2, Math.Max(2f, _bars[i] * 0.48f));
-                float bx = i * spacing + (spacing - barW) / 2f;
-
-                // Upper bar
-                using (System.Drawing.Drawing2D.LinearGradientBrush brushUp = new System.Drawing.Drawing2D.LinearGradientBrush(new PointF(bx, cy - halfH), new PointF(bx, cy), SecondaryColor, AccentColor))
-                {
-                    g.FillRectangle(brushUp, bx, cy - halfH, barW, halfH);
-                }
-
-                // Lower mirrored bar
-                using (System.Drawing.Drawing2D.LinearGradientBrush brushDown = new System.Drawing.Drawing2D.LinearGradientBrush(new PointF(bx, cy), new PointF(bx, cy + halfH), AccentColor, SecondaryColor))
-                {
-                    g.FillRectangle(brushDown, bx, cy, barW, halfH);
-                }
-            }
-
-
-
-            // Center neon divider line
+            using (System.Drawing.Drawing2D.LinearGradientBrush brushUp = new System.Drawing.Drawing2D.LinearGradientBrush(new RectangleF(0, 0, w, cy), SecondaryColor, AccentColor, 90f))
+            using (System.Drawing.Drawing2D.LinearGradientBrush brushDown = new System.Drawing.Drawing2D.LinearGradientBrush(new RectangleF(0, cy, w, cy), AccentColor, SecondaryColor, 90f))
             using (System.Drawing.Pen divPen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(90, AccentColor), 1f))
             {
+                for (int i = 0; i < _bars.Length; i++)
+                {
+                    float halfH = Math.Min(cy - 2, Math.Max(2f, _bars[i] * 0.48f));
+                    float bx = i * spacing + (spacing - barW) / 2f;
+                    g.FillRectangle(brushUp, bx, cy - halfH, barW, halfH);
+                    g.FillRectangle(brushDown, bx, cy, barW, halfH);
+                }
                 g.DrawLine(divPen, 0, cy, w, cy);
             }
         }
@@ -1663,6 +1646,7 @@ namespace Dexplay
         private Label[] _lblEqValues = new Label[5];
         private Button _btnBassBoost;
         private Button _btnAutoNext;
+        private Button _btnAutoStart;
         private DarkSlider _sliderTempo;
         private Label _lblTempoVal;
         private Button _btnTempoReset;
@@ -1695,8 +1679,7 @@ namespace Dexplay
 
         // Engines
         private NativeAudioPlayer _player = new NativeAudioPlayer();
-        private System.Media.SoundPlayer _fxPlayer;
-        private readonly object _fxLock = new object();
+        private bool _wasPlayingLastTick = false;
         private System.Windows.Forms.Timer _animTimer = new System.Windows.Forms.Timer();
         private System.Windows.Forms.Timer _tickTimer = new System.Windows.Forms.Timer();
         private NotifyIcon _trayIcon;
@@ -1934,11 +1917,77 @@ namespace Dexplay
             this.Activate();
         }
 
+        private MenuItem _trayAutoStartItem;
+
+        private bool IsAutoStartEnabled()
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", false))
+                {
+                    if (key == null) return false;
+                    object val = key.GetValue("Dexplay");
+                    return val != null && !string.IsNullOrEmpty(val.ToString());
+                }
+            }
+            catch { return false; }
+        }
+
+        private void SetAutoStart(bool enabled)
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (key == null) return;
+                    if (enabled)
+                        key.SetValue("Dexplay", "\"" + Application.ExecutablePath + "\"");
+                    else
+                        key.DeleteValue("Dexplay", false);
+                }
+            }
+            catch { }
+        }
+
+        public void ToggleAutoStart()
+        {
+            bool next = !IsAutoStartEnabled();
+            SetAutoStart(next);
+            UpdateAutoStartUI();
+        }
+
+        private void UpdateAutoStartUI()
+        {
+            bool enabled = IsAutoStartEnabled();
+            if (_btnAutoStart != null)
+            {
+                _btnAutoStart.Text = enabled ? "AUTOSTART: ON" : "AUTOSTART: OFF";
+                _btnAutoStart.BackColor = enabled ? _accent : System.Drawing.Color.FromArgb(24, 28, 42);
+                _btnAutoStart.ForeColor = enabled ? System.Drawing.Color.FromArgb(8, 9, 13) : _textMuted;
+            }
+            if (_trayAutoStartItem != null)
+            {
+                _trayAutoStartItem.Checked = enabled;
+            }
+        }
+
         private void InitTray()
         {
+            Icon appIcon = SystemIcons.Application;
+            try
+            {
+                Icon extracted = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (extracted != null)
+                {
+                    appIcon = extracted;
+                    this.Icon = extracted;
+                }
+            }
+            catch { }
+
             _trayIcon = new NotifyIcon();
             _trayIcon.Text = "Dexplay — Desktop Music Island";
-            _trayIcon.Icon = SystemIcons.Application;
+            _trayIcon.Icon = appIcon;
             _trayIcon.Visible = true;
 
             ContextMenu menu = new ContextMenu();
@@ -1946,8 +1995,13 @@ namespace Dexplay
             menu.MenuItems.Add("Cari Lagu (YouTube Music)", (s, e) => { ShowFromTray(); OpenSearchTab(); });
             menu.MenuItems.Add("Mode Island / Notch", (s, e) => { ShowFromTray(); ToggleIsland(); });
             menu.MenuItems.Add("Putar / Jeda", (s, e) => TogglePlay());
+            menu.MenuItems.Add("Sembunyikan ke Tray", (s, e) => { this.Hide(); });
             menu.MenuItems.Add("-");
-            menu.MenuItems.Add("Keluar", (s, e) => Application.Exit());
+            _trayAutoStartItem = new MenuItem("Auto-Start saat Windows Nyala", (s, e) => ToggleAutoStart());
+            _trayAutoStartItem.Checked = IsAutoStartEnabled();
+            menu.MenuItems.Add(_trayAutoStartItem);
+            menu.MenuItems.Add("-");
+            menu.MenuItems.Add("Keluar", (s, e) => this.Close());
 
             _trayIcon.ContextMenu = menu;
             _trayIcon.DoubleClick += (s, e) => { ShowFromTray(); ToggleExpand(); };
@@ -2071,8 +2125,8 @@ namespace Dexplay
 
             // CLOSE / HIDE TO TRAY BUTTON (✕)
             _btnHeaderClose = new VectorButton(VectorIconType.Close, 392, 8, 26, 30);
-            _toolTip.SetToolTip(_btnHeaderClose, "Sembunyikan ke System Tray");
-            _btnHeaderClose.Click += (s, e) => { this.Hide(); };
+            _toolTip.SetToolTip(_btnHeaderClose, "Tutup Dexplay");
+            _btnHeaderClose.Click += (s, e) => { this.Close(); };
 
             _headerPanel.Controls.Add(_btnHeaderPlay);
             _headerPanel.Controls.Add(_lblHeaderTitle);
@@ -2990,11 +3044,11 @@ namespace Dexplay
             {
                 Text = _bassBoostActive ? "BASS: +6 dB" : "BASS: OFF",
                 Location = new System.Drawing.Point(14, 36),
-                Size = new System.Drawing.Size(122, 36),
+                Size = new System.Drawing.Size(92, 36),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = _bassBoostActive ? _accent : System.Drawing.Color.FromArgb(24, 28, 42),
                 ForeColor = _bassBoostActive ? System.Drawing.Color.FromArgb(8, 9, 13) : _textMuted,
-                Font = new System.Drawing.Font("Segoe UI", 8.2f, FontStyle.Bold),
+                Font = new System.Drawing.Font("Segoe UI", 7.8f, FontStyle.Bold),
                 Cursor = Cursors.Hand,
                 UseMnemonic = false
             };
@@ -3004,24 +3058,41 @@ namespace Dexplay
             _btnAutoNext = new Button
             {
                 Text = _autoNext ? "AUTO-NEXT: ON" : "AUTO-NEXT: OFF",
-                Location = new System.Drawing.Point(144, 36),
-                Size = new System.Drawing.Size(126, 36),
+                Location = new System.Drawing.Point(112, 36),
+                Size = new System.Drawing.Size(104, 36),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = _autoNext ? _accent : System.Drawing.Color.FromArgb(24, 28, 42),
                 ForeColor = _autoNext ? System.Drawing.Color.FromArgb(8, 9, 13) : _textMuted,
-                Font = new System.Drawing.Font("Segoe UI", 8.2f, FontStyle.Bold),
+                Font = new System.Drawing.Font("Segoe UI", 7.8f, FontStyle.Bold),
                 Cursor = Cursors.Hand,
                 UseMnemonic = false
             };
             _btnAutoNext.FlatAppearance.BorderSize = 0;
             _btnAutoNext.Click += (s, e) => ToggleAutoNext();
 
+            bool autoStartOn = IsAutoStartEnabled();
+            _btnAutoStart = new Button
+            {
+                Text = autoStartOn ? "AUTOSTART: ON" : "AUTOSTART: OFF",
+                Location = new System.Drawing.Point(222, 36),
+                Size = new System.Drawing.Size(108, 36),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = autoStartOn ? _accent : System.Drawing.Color.FromArgb(24, 28, 42),
+                ForeColor = autoStartOn ? System.Drawing.Color.FromArgb(8, 9, 13) : _textMuted,
+                Font = new System.Drawing.Font("Segoe UI", 7.8f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                UseMnemonic = false
+            };
+            _btnAutoStart.FlatAppearance.BorderSize = 0;
+            _btnAutoStart.Click += (s, e) => ToggleAutoStart();
+
             cardEnhance.Controls.Add(lblEnhance);
             cardEnhance.Controls.Add(_btnBassBoost);
             cardEnhance.Controls.Add(_btnAutoNext);
+            cardEnhance.Controls.Add(_btnAutoStart);
 
             // Right: Playback Tempo / Speed Slider
-            int tempoX = 290;
+            int tempoX = 342;
             int tempoW = contentW - tempoX - 14;
 
             Label lblTempoTitle = new Label
@@ -3197,24 +3268,36 @@ namespace Dexplay
         private void TickTimer_Tick(object sender, EventArgs e)
         {
             bool playing = _player.IsPlaying;
-            _miniEq.IsPlaying = playing;
-            _miniEq.UpdateFrame();
 
-            if (_isExpanded && _currentTab == 0)
+            // Adaptive low-CPU timer: 40ms (25 FPS) when playing, 250ms (4 FPS) when idle/paused
+            int desiredInterval = playing ? 40 : 250;
+            if (_tickTimer.Interval != desiredInterval) _tickTimer.Interval = desiredInterval;
+
+            if (playing || _wasPlayingLastTick)
             {
-                _visualizer.IsPlaying = playing;
-                _visualizer.UpdateFrame();
+                _miniEq.IsPlaying = playing;
+                _miniEq.UpdateFrame();
 
-                if (_vinylDisc != null)
+                if (_isExpanded && _currentTab == 0)
                 {
-                    _vinylDisc.UpdateFrame(playing, _tempoSpeed);
+                    _visualizer.IsPlaying = playing;
+                    _visualizer.UpdateFrame();
+
+                    if (_vinylDisc != null)
+                    {
+                        _vinylDisc.UpdateFrame(playing, _tempoSpeed);
+                    }
                 }
             }
+            _wasPlayingLastTick = playing;
 
             UpdateAmbientAura(playing);
 
-            // Smooth header title ticker so long titles are never truncated
-            UpdateHeaderTitleTicker();
+            // Smooth header title ticker only when playing or expanded
+            if (playing || _isExpanded)
+            {
+                UpdateHeaderTitleTicker();
+            }
 
             if (playing)
             {
@@ -3307,10 +3390,10 @@ namespace Dexplay
                 _auraAlpha = 35;
             }
 
-            if (_auraAlpha != _lastAuraAlpha && (_tickerCounter % 4 == 0 || !playing))
+            if (_auraAlpha != _lastAuraAlpha && (_tickerCounter % 6 == 0 || !playing))
             {
                 _lastAuraAlpha = _auraAlpha;
-                this.Invalidate();
+                this.Invalidate(false);
             }
         }
 
@@ -3763,15 +3846,12 @@ namespace Dexplay
             UnregisterGlobalHotkeys();
             try { _animTimer.Stop(); _animTimer.Dispose(); } catch { }
             try { _tickTimer.Stop(); _tickTimer.Dispose(); } catch { }
-            try { _player.Dispose(); } catch { }
-            lock (_fxLock)
-            {
-                try { if (_fxPlayer != null) { _fxPlayer.Stop(); _fxPlayer.Dispose(); _fxPlayer = null; } } catch { }
-            }
+            try { _player.Stop(); _player.Dispose(); } catch { }
             try { if (_trayIcon != null) { _trayIcon.Visible = false; _trayIcon.Dispose(); _trayIcon = null; } } catch { }
             try { if (_toolTip != null) { _toolTip.Dispose(); _toolTip = null; } } catch { }
             try { _fontBadge.Dispose(); _fontListTime.Dispose(); _fontListRegular.Dispose(); _fontListBold.Dispose(); _fontListItalic.Dispose(); } catch { }
             base.OnFormClosing(e);
+            Application.Exit();
         }
 
         protected override void WndProc(ref Message m)
@@ -3901,6 +3981,7 @@ namespace Dexplay
                     _btnAutoNext.BackColor = _autoNext ? _accent : System.Drawing.Color.FromArgb(24, 28, 42);
                     _btnAutoNext.ForeColor = _autoNext ? System.Drawing.Color.FromArgb(8, 9, 13) : _textMuted;
                 }
+                UpdateAutoStartUI();
                 if (_btnEqBypass != null)
                 {
                     _btnEqBypass.BackColor = _eqActive ? _accent : System.Drawing.Color.FromArgb(24, 28, 42);

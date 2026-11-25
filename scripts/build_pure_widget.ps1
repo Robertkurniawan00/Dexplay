@@ -25,6 +25,7 @@ Write-Host "[OK] Using C# Compiler: $CscPath" -ForegroundColor Green
 # 2. Source and Target
 $SourceFile = Join-Path $ProjectRoot "src\Dexplay.cs"
 $TargetExe = Join-Path $ProjectRoot "Dexplay.exe"
+$IconFile = Join-Path $ProjectRoot "assets\dexplay.ico"
 
 # Safely close running instance if any
 Get-Process -Name "Dexplay", "MusicNotchWidget" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -58,7 +59,12 @@ $CompilerArgs = @(
     "/optimize+",
     "/platform:anycpu",
     "/codepage:65001",
-    "/utf8output",
+    "/utf8output"
+)
+if (Test-Path $IconFile) {
+    $CompilerArgs += "/win32icon:$IconFile"
+}
+$CompilerArgs += @(
     "/r:$References",
     "/out:$TargetExe",
     $SourceFile

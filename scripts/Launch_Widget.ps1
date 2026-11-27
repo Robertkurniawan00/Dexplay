@@ -30,7 +30,21 @@ if ($needsRebuild) {
 Write-Host "[OK] Verified Native Executable: $ExePath" -ForegroundColor Green
 Write-Host "[+] Launching Dexplay.exe on Windows Desktop..." -ForegroundColor Cyan
 
-Start-Process -FilePath $ExePath -WorkingDirectory $ProjectRoot
-
-Write-Host "`n[SUCCESS] Dexplay is now active!" -ForegroundColor Green
-Write-Host "Floating on your monitor without any browser or web server." -ForegroundColor Gray
+try {
+    Start-Process -FilePath $ExePath -WorkingDirectory $ProjectRoot
+    Write-Host "`n[SUCCESS] Dexplay is now active!" -ForegroundColor Green
+    Write-Host "Floating on your monitor without any browser or web server." -ForegroundColor Gray
+} catch {
+    $msg = $_.Exception.Message
+    if ($msg -match "Application Control|Smart App|blocked") {
+        Write-Host "`n[BLOCKED] Windows Smart App Control blocked Dexplay.exe." -ForegroundColor Red
+        Write-Host "Reason : Dexplay.exe is unsigned and Windows Smart App Control is currently ON." -ForegroundColor Yellow
+        Write-Host "Fixes  :" -ForegroundColor Cyan
+        Write-Host "  1. Sign Dexplay.exe with a publicly trusted Code Signing cert (DigiCert/Sectigo/Azure Trusted Signing/SignPath):" -ForegroundColor Gray
+        Write-Host "     powershell -ExecutionPolicy Bypass -File scripts\build_pure_widget.ps1 -CertThumbprint <THUMBPRINT>" -ForegroundColor Gray
+        Write-Host "  2. Or if running your own local unsigned builds on this PC, set Smart App Control to Off:" -ForegroundColor Gray
+        Write-Host "     Windows Security > App & browser control > Smart App Control settings > Off" -ForegroundColor Gray
+        exit 1
+    }
+    throw
+}

@@ -996,6 +996,7 @@ namespace Dexplay
         private System.Drawing.Color _accentColor = System.Drawing.Color.FromArgb(103, 232, 249);
         private ContextMenuStrip _menu;
 
+        public string PlaceholderText { get; set; }
         public event EventHandler SelectedIndexChanged;
 
         public System.Drawing.Color AccentColor
@@ -1114,6 +1115,12 @@ namespace Dexplay
                 }
                 Rectangle textRect = new Rectangle(textStartX, 0, this.Width - textStartX - 30, this.Height);
                 TextRenderer.DrawText(g, _items[_selectedIndex], this.Font, textRect, this.ForeColor,
+                    TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            }
+            else if (!string.IsNullOrEmpty(PlaceholderText))
+            {
+                Rectangle textRect = new Rectangle(textStartX, 0, this.Width - textStartX - 30, this.Height);
+                TextRenderer.DrawText(g, PlaceholderText, this.Font, textRect, System.Drawing.Color.FromArgb(150, 185, 215),
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             }
 
@@ -1254,6 +1261,8 @@ namespace Dexplay
         private bool _isPlaying = false;
         private double _speedRatio = 1.0;
         private bool _suppressMediaEnded = true;
+        private bool _pauseOnOpen = false;
+        private bool _hasOpenedMedia = false;
         private DateTime _playbackStartTime = DateTime.MinValue;
 
         public event Action MediaEnded;
@@ -1261,6 +1270,7 @@ namespace Dexplay
         public event Action MediaFailed;
 
         public bool IsPlaying { get { return _isPlaying; } }
+        public bool HasOpenedMedia { get { return _hasOpenedMedia; } }
         public double SpeedRatio { get { return _speedRatio; } }
 
         public NativeAudioPlayer()
@@ -1270,8 +1280,22 @@ namespace Dexplay
 
             _player.MediaOpened += (s, e) =>
             {
-                _suppressMediaEnded = false;
-                _playbackStartTime = DateTime.UtcNow;
+                if (_pauseOnOpen)
+                {
+                    try
+                    {
+                        _player.Pause();
+                        _player.Position = TimeSpan.Zero;
+                    }
+                    catch { }
+                    _isPlaying = false;
+                    _suppressMediaEnded = true;
+                }
+                else
+                {
+                    _suppressMediaEnded = false;
+                    _playbackStartTime = DateTime.UtcNow;
+                }
                 int durationMs = 0;
                 try
                 {
@@ -1292,6 +1316,7 @@ namespace Dexplay
             _player.MediaFailed += (s, e) =>
             {
                 _isPlaying = false;
+                _hasOpenedMedia = false;
                 _suppressMediaEnded = true;
                 if (MediaFailed != null) MediaFailed();
             };
@@ -1332,6 +1357,7 @@ namespace Dexplay
         {
             try
             {
+                _pauseOnOpen = false;
                 _suppressMediaEnded = false;
                 _playbackStartTime = DateTime.UtcNow;
                 _player.SpeedRatio = _speedRatio;
@@ -1345,8 +1371,10 @@ namespace Dexplay
         {
             try
             {
+                _pauseOnOpen = true;
                 _suppressMediaEnded = true;
                 _isPlaying = false;
+                _hasOpenedMedia = true;
                 try { _player.Stop(); } catch { }
                 try { _player.Close(); } catch { }
 
@@ -1360,6 +1388,7 @@ namespace Dexplay
                     _player.Open(new Uri(Path.GetFullPath(pathOrUrl)));
                 }
                 _player.SpeedRatio = _speedRatio;
+                try { _player.Pause(); } catch { }
             }
             catch { }
         }
@@ -1368,7 +1397,9 @@ namespace Dexplay
         {
             try
             {
+                _pauseOnOpen = false;
                 _suppressMediaEnded = true;
+                _hasOpenedMedia = true;
                 _playbackStartTime = DateTime.UtcNow;
                 try { _player.Stop(); } catch { }
                 try { _player.Close(); } catch { }
@@ -1393,8 +1424,10 @@ namespace Dexplay
         {
             try
             {
+                _pauseOnOpen = false;
                 _suppressMediaEnded = true;
                 _isPlaying = false;
+                _hasOpenedMedia = false;
                 _player.Stop();
                 _player.Close();
             }
@@ -1422,6 +1455,7 @@ namespace Dexplay
                 }
                 else
                 {
+                    _pauseOnOpen = false;
                     _suppressMediaEnded = false;
                     _playbackStartTime = DateTime.UtcNow;
                     _player.Play();
@@ -2717,14 +2751,16 @@ namespace Dexplay
         public bool IsIsland = false;
         public bool IsPinned = false;
 
-        // Last played track state (instant persistence & restore on launch)
-        public string LastTitle = "Sudden Shower (소나기)";
-        public string LastArtist = "ECLIPSE";
-        public string LastVideoId = "ESWcsKySnNs";
+        // Last played track state & queue persistence
+        public string LastTitle = "";
+        public string LastArtist = "";
+        public string LastVideoId = "";
         public string LastUrl = "";
-        public int LastDurationMs = 233000;
-        public string LastGenre = "YT MUSIC • Official Audio";
-        public string LastSource = "YT_MUSIC";
+        public int LastDurationMs = 0;
+        public string LastGenre = "";
+        public string LastSource = "";
+        public bool HasSavedQueue = false;
+        public List<TrackItem> Queue = new List<TrackItem>();
 
         public static string GetConfigPath()
         {
@@ -2760,13 +2796,36 @@ namespace Dexplay
                 cfg.IsIsland = ExtractBool(json, "IsIsland", false);
                 cfg.IsPinned = ExtractBool(json, "IsPinned", false);
 
-                cfg.LastTitle = ExtractString(json, "LastTitle", "Sudden Shower (소나기)");
-                cfg.LastArtist = ExtractString(json, "LastArtist", "ECLIPSE");
-                cfg.LastVideoId = ExtractString(json, "LastVideoId", "ESWcsKySnNs");
+                cfg.LastTitle = ExtractString(json, "LastTitle", "");
+                cfg.LastArtist = ExtractString(json, "LastArtist", "");
+                cfg.LastVideoId = ExtractString(json, "LastVideoId", "");
                 cfg.LastUrl = ExtractString(json, "LastUrl", "");
-                cfg.LastDurationMs = ExtractInt(json, "LastDurationMs", 233000);
-                cfg.LastGenre = ExtractString(json, "LastGenre", "YT MUSIC • Official Audio");
-                cfg.LastSource = ExtractString(json, "LastSource", "YT_MUSIC");
+                cfg.LastDurationMs = ExtractInt(json, "LastDurationMs", 0);
+                cfg.LastGenre = ExtractString(json, "LastGenre", "");
+                cfg.LastSource = ExtractString(json, "LastSource", "");
+
+                Match qMatch = Regex.Match(json, "\"Queue\"\\s*:\\s*\\[(.*?)\\]", RegexOptions.Singleline);
+                if (qMatch.Success)
+                {
+                    cfg.HasSavedQueue = true;
+                    string qBody = qMatch.Groups[1].Value;
+                    foreach (Match itemM in Regex.Matches(qBody, "\\{(.*?)\\}", RegexOptions.Singleline))
+                    {
+                        string obj = itemM.Groups[1].Value;
+                        string t = ExtractString(obj, "Title", "");
+                        if (string.IsNullOrEmpty(t)) continue;
+                        cfg.Queue.Add(new TrackItem
+                        {
+                            Title = t,
+                            Artist = ExtractString(obj, "Artist", "Unknown Artist"),
+                            VideoId = ExtractString(obj, "VideoId", ""),
+                            Url = ExtractString(obj, "Url", ""),
+                            DurationMs = ExtractInt(obj, "DurationMs", 180000),
+                            Genre = ExtractString(obj, "Genre", "YT MUSIC • Official Audio"),
+                            Source = ExtractString(obj, "Source", "YT_MUSIC")
+                        });
+                    }
+                }
             }
             catch { }
             return cfg;
@@ -2796,7 +2855,32 @@ namespace Dexplay
                 sb.AppendLine(string.Format("  \"LastUrl\": \"{0}\",", EscapeJson(LastUrl)));
                 sb.AppendLine(string.Format("  \"LastDurationMs\": {0},", LastDurationMs));
                 sb.AppendLine(string.Format("  \"LastGenre\": \"{0}\",", EscapeJson(LastGenre)));
-                sb.AppendLine(string.Format("  \"LastSource\": \"{0}\"", EscapeJson(LastSource)));
+                sb.AppendLine(string.Format("  \"LastSource\": \"{0}\",", EscapeJson(LastSource)));
+                sb.AppendLine("  \"Queue\": [");
+                List<TrackItem> validQueue = new List<TrackItem>();
+                if (Queue != null)
+                {
+                    foreach (TrackItem tr in Queue)
+                    {
+                        if (tr != null && !string.IsNullOrEmpty(tr.Title) && tr.Source != "NONE") validQueue.Add(tr);
+                    }
+                }
+                for (int i = 0; i < validQueue.Count; i++)
+                {
+                    TrackItem tr = validQueue[i];
+                    string comma = (i < validQueue.Count - 1) ? "," : "";
+                    sb.AppendLine(string.Format(
+                        "    {{ \"Title\": \"{0}\", \"Artist\": \"{1}\", \"VideoId\": \"{2}\", \"Url\": \"{3}\", \"DurationMs\": {4}, \"Genre\": \"{5}\", \"Source\": \"{6}\" }}{7}",
+                        EscapeJson(tr.Title),
+                        EscapeJson(tr.Artist ?? ""),
+                        EscapeJson(tr.VideoId ?? ""),
+                        EscapeJson(tr.Url ?? ""),
+                        tr.DurationMs,
+                        EscapeJson(tr.Genre ?? "YT MUSIC • Official Audio"),
+                        EscapeJson(tr.Source ?? "YT_MUSIC"),
+                        comma));
+                }
+                sb.AppendLine("  ]");
                 sb.AppendLine("}");
                 File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
             }
@@ -3122,16 +3206,21 @@ namespace Dexplay
         private System.Drawing.Color _textMuted = System.Drawing.Color.FromArgb(168, 198, 228);
 
         // Tracks & Data
-        private TrackItem _currentTrack = new TrackItem
+        private TrackItem _currentTrack = CreateEmptyTrack();
+
+        private static TrackItem CreateEmptyTrack()
         {
-            Title = "Sudden Shower (소나기)",
-            Artist = "ECLIPSE",
-            Genre = "YT MUSIC • Official Audio",
-            Source = "YT_MUSIC",
-            DurationMs = 233000,
-            VideoId = "ESWcsKySnNs",
-            Url = ""
-        };
+            return new TrackItem
+            {
+                Title = "No Track Loaded",
+                Artist = "Search or drop audio",
+                Genre = "READY",
+                Source = "NONE",
+                DurationMs = 0,
+                VideoId = "",
+                Url = ""
+            };
+        }
 
         private List<TrackItem> _queue = new List<TrackItem>();
         private List<TrackItem> _searchTracks = new List<TrackItem>();
@@ -3287,7 +3376,6 @@ namespace Dexplay
             this.Opacity = 0.93;
 
             InitTray();
-            SetupSampleData();
             BuildUI();
             LoadSavedConfig();
 
@@ -3340,12 +3428,10 @@ namespace Dexplay
 
             Rectangle screen = Screen.PrimaryScreen.WorkingArea;
             int x = (screen.Width - COLLAPSED_W) / 2;
-            int y = 0;
+            int y = _isIsland ? 36 : 0;
             this.Location = new System.Drawing.Point(x, y);
             this.Size = new System.Drawing.Size(COLLAPSED_W, COLLAPSED_H);
             ApplyRoundedRegion();
-
-            LoadTrack(_currentTrack, false);
 
             _animTimer.Interval = 15;
             _animTimer.Tick += AnimTimer_Tick;
@@ -3485,13 +3571,6 @@ namespace Dexplay
 
             _trayIcon.ContextMenu = menu;
             _trayIcon.DoubleClick += (s, e) => { ShowFromTray(); ToggleExpand(); };
-        }
-
-        private void SetupSampleData()
-        {
-            _queue.Add(_currentTrack);
-            _queue.Add(new TrackItem { Title = "Sudden Shower (Instrumental)", Artist = "ECLIPSE", Genre = "YT MUSIC • Official Audio", Source = "YT_MUSIC", VideoId = "MNM4D5CxJaU", DurationMs = 233000 });
-            _queue.Add(new TrackItem { Title = "Spring Snow", Artist = "10CM", Genre = "YT MUSIC • Official Audio", Source = "YT_MUSIC", VideoId = "ok2pqepWTLU", DurationMs = 200000 });
         }
 
         private void ApplyRoundedRegion()
@@ -4868,7 +4947,7 @@ namespace Dexplay
             {
                 Location = new System.Drawing.Point(78, 10),
                 Size = new System.Drawing.Size(w - 154, 20),
-                Text = "120.0 BPM • 1.00x",
+                Text = "NO TRACK LOADED",
                 BackColor = System.Drawing.Color.Transparent,
                 ForeColor = System.Drawing.Color.White,
                 Font = new System.Drawing.Font("Consolas", 8f, FontStyle.Bold),
@@ -4902,7 +4981,8 @@ namespace Dexplay
                 Location = new System.Drawing.Point(10, 36),
                 Size = new System.Drawing.Size(w - 20, 28),
                 Font = new System.Drawing.Font("Segoe UI", 8.3f),
-                AccentColor = _accent
+                AccentColor = _accent,
+                PlaceholderText = "Select track from queue..."
             };
             cmb.SelectedIndexChanged += (s, e) =>
             {
@@ -5054,28 +5134,26 @@ namespace Dexplay
             {
                 _cmbMashA.ClearItems();
                 _cmbMashB.ClearItems();
+                int selA = -1;
+                int selB = -1;
                 for (int i = 0; i < _queue.Count; i++)
                 {
                     string label = string.Format("{0}. {1} — {2}", i + 1, _queue[i].Title, _queue[i].Artist);
                     _cmbMashA.AddItem(label, _accent);
                     _cmbMashB.AddItem(label, _secondaryAccent);
+                    if (_mashTrackA != null && _queue[i].Title == _mashTrackA.Title && _queue[i].VideoId == _mashTrackA.VideoId)
+                    {
+                        selA = i;
+                    }
+                    if (_mashTrackB != null && _queue[i].Title == _mashTrackB.Title && _queue[i].VideoId == _mashTrackB.VideoId)
+                    {
+                        selB = i;
+                    }
                 }
 
-                if (_queue.Count > 0 && _mashTrackA == null)
-                {
-                    _cmbMashA.SetSelectedIndexSilent(0);
-                    LoadMashupTrack(true, _queue[0]);
-                }
-                if (_queue.Count > 1 && _mashTrackB == null)
-                {
-                    _cmbMashB.SetSelectedIndexSilent(1);
-                    LoadMashupTrack(false, _queue[1]);
-                }
-                else if (_queue.Count > 0 && _mashTrackB == null)
-                {
-                    _cmbMashB.SetSelectedIndexSilent(0);
-                    LoadMashupTrack(false, _queue[0]);
-                }
+                // Preserve active selection only; never auto-load or open audio streams at startup
+                _cmbMashA.SetSelectedIndexSilent(selA);
+                _cmbMashB.SetSelectedIndexSilent(selB);
             }
             finally
             {
@@ -6209,6 +6287,13 @@ namespace Dexplay
                 }
                 UpdateEqualizerDsp();
 
+                if (_queue == null) _queue = new List<TrackItem>();
+                _queue.Clear();
+                if (cfg.HasSavedQueue && cfg.Queue != null)
+                {
+                    _queue.AddRange(cfg.Queue);
+                }
+
                 if (!string.IsNullOrEmpty(cfg.LastTitle))
                 {
                     _currentTrack = new TrackItem
@@ -6221,11 +6306,17 @@ namespace Dexplay
                         Genre = !string.IsNullOrEmpty(cfg.LastGenre) ? cfg.LastGenre : "YT MUSIC • Official Audio",
                         Source = !string.IsNullOrEmpty(cfg.LastSource) ? cfg.LastSource : "YT_MUSIC"
                     };
-                    if (_queue != null)
+                    if (!cfg.HasSavedQueue && _queue.Count == 0)
                     {
-                        if (_queue.Count > 0) _queue[0] = _currentTrack;
-                        else _queue.Add(_currentTrack);
+                        _queue.Add(_currentTrack);
                     }
+                    RefreshQueueUI();
+                    LoadTrack(_currentTrack, false);
+                }
+                else
+                {
+                    _currentTrack = (_queue.Count > 0) ? _queue[0] : CreateEmptyTrack();
+                    RefreshQueueUI();
                     LoadTrack(_currentTrack, false);
                 }
             }
@@ -6249,7 +6340,7 @@ namespace Dexplay
                 cfg.IsLooping = _isLooping;
                 cfg.IsIsland = _isIsland;
                 cfg.IsPinned = _isPinned;
-                if (_currentTrack != null)
+                if (_currentTrack != null && _currentTrack.Source != "NONE" && !string.IsNullOrEmpty(_currentTrack.Title) && _currentTrack.Title != "No Track Loaded")
                 {
                     cfg.LastTitle = _currentTrack.Title ?? "";
                     cfg.LastArtist = _currentTrack.Artist ?? "";
@@ -6259,6 +6350,17 @@ namespace Dexplay
                     cfg.LastGenre = _currentTrack.Genre ?? "YT MUSIC • Official Audio";
                     cfg.LastSource = _currentTrack.Source ?? "YT_MUSIC";
                 }
+                else
+                {
+                    cfg.LastTitle = "";
+                    cfg.LastArtist = "";
+                    cfg.LastVideoId = "";
+                    cfg.LastUrl = "";
+                    cfg.LastDurationMs = 0;
+                    cfg.LastGenre = "";
+                    cfg.LastSource = "";
+                }
+                cfg.Queue = _queue != null ? new List<TrackItem>(_queue) : new List<TrackItem>();
                 cfg.Save();
             }
             catch { }
@@ -6273,15 +6375,17 @@ namespace Dexplay
 
         public void LoadTrack(TrackItem track, bool playImmediate = true)
         {
-            if (track == null) return;
+            if (track == null) track = CreateEmptyTrack();
             _currentTrack = track;
             _pendingPlay = playImmediate;
             _headerProgressPct = 0f;
-            SaveCurrentConfig();
             int loadId = Interlocked.Increment(ref _currentLoadId);
 
             _player.Stop();
             if (playImmediate) StopAllMashupDecks();
+
+            bool isEmptyTrack = (track.Source == "NONE") ||
+                (string.IsNullOrEmpty(track.VideoId) && string.IsNullOrEmpty(track.Url) && (string.IsNullOrEmpty(track.Title) || track.Title == "No Track Loaded"));
 
             if (_scrubBar != null)
             {
@@ -6289,14 +6393,14 @@ namespace Dexplay
                 _scrubBar.Maximum = Math.Max(1000, track.DurationMs > 0 ? track.DurationMs : 200000);
             }
             if (_lblTimeCur != null) _lblTimeCur.Text = "0:00";
-            if (_lblTimeTot != null) _lblTimeTot.Text = FormatTime(track.DurationMs > 0 ? track.DurationMs : 200000);
+            if (_lblTimeTot != null) _lblTimeTot.Text = isEmptyTrack ? "0:00" : FormatTime(track.DurationMs > 0 ? track.DurationMs : 200000);
 
             _activeLyricIndex = -1;
             if (_lyrics != null) _lyrics.Clear();
             if (_lstLyrics != null)
             {
                 _lstLyrics.Items.Clear();
-                _lstLyrics.Items.Add("Loading synced lyrics...");
+                _lstLyrics.Items.Add(isEmptyTrack ? "Search or play a track to load synced lyrics" : "Loading synced lyrics...");
             }
             UpdateDeckLyricPreview();
             if (_lstQueue != null) _lstQueue.Invalidate();
@@ -6304,33 +6408,50 @@ namespace Dexplay
             _headerScrollOffset = 0;
             _headerScrollPause = 20;
             _lastHeaderText = "";
-            SetHeaderLabelText(track.Artist + " — " + track.Title, true);
+            SetHeaderLabelText(isEmptyTrack ? "Dexplay — Ready" : (track.Artist + " — " + track.Title), true);
             _lblTrackTitle.Text = track.Title;
             _lblTrackArtist.Text = track.Artist;
             if (_lblSourceBadge != null)
             {
-                _lblSourceBadge.Text = (track.Source == "LOCAL") ? track.Genre.ToUpper() : "YT MUSIC • OFFICIAL AUDIO";
+                _lblSourceBadge.Text = isEmptyTrack ? "READY" : ((track.Source == "LOCAL") ? track.Genre.ToUpper() : "YT MUSIC • OFFICIAL AUDIO");
             }
             UpdateDeckInfoCard();
 
-            UpdatePlayButtonUI(_pendingPlay);
+            UpdatePlayButtonUI(false);
             _player.SetSpeedRatio(_tempoSpeed);
+            SaveCurrentConfig();
+
+            if (isEmptyTrack)
+            {
+                _isDownloadingAudio = false;
+                _pendingPlay = false;
+                return;
+            }
 
             ThreadPool.QueueUserWorkItem(state => FetchLrcLyrics(track.Title, track.Artist, loadId));
 
-            if (!string.IsNullOrEmpty(track.VideoId) && string.IsNullOrEmpty(track.Url))
+            // Keep startup / passive restore completely silent until the user presses Play
+            if (!playImmediate)
             {
+                _isDownloadingAudio = false;
+                return;
+            }
+
+            UpdatePlayButtonUI(true);
+
+            bool isYoutube = !string.IsNullOrEmpty(track.VideoId);
+            bool hasLocalFile = !string.IsNullOrEmpty(track.Url) && File.Exists(track.Url);
+
+            if (isYoutube && !hasLocalFile)
+            {
+                track.Url = "";
                 ExtractAndPlayYouTubeTrack(track, loadId);
             }
             else if (!string.IsNullOrEmpty(track.Url))
             {
                 _isDownloadingAudio = false;
-                if (_pendingPlay)
-                {
-                    _player.Play(track.Url);
-                    UpdateEqualizerDsp();
-                }
-                else _player.Open(track.Url);
+                _player.Play(track.Url);
+                UpdateEqualizerDsp();
                 UpdatePlayButtonUI(_player.IsPlaying);
             }
             else
@@ -6347,6 +6468,19 @@ namespace Dexplay
             {
                 _pendingPlay = !_pendingPlay;
                 UpdatePlayButtonUI(_pendingPlay);
+                return;
+            }
+
+            if (_currentTrack == null || _currentTrack.Source == "NONE" ||
+                (string.IsNullOrEmpty(_currentTrack.VideoId) && string.IsNullOrEmpty(_currentTrack.Url)))
+            {
+                OpenSearchTab();
+                return;
+            }
+
+            if (!_player.HasOpenedMedia)
+            {
+                LoadTrack(_currentTrack, true);
                 return;
             }
 
@@ -7852,9 +7986,12 @@ namespace Dexplay
                 }
                 else
                 {
-                    _player.Stop();
-                    UpdatePlayButtonUI(false);
+                    LoadTrack(CreateEmptyTrack(), false);
                 }
+            }
+            else
+            {
+                SaveCurrentConfig();
             }
         }
 
@@ -7866,15 +8003,17 @@ namespace Dexplay
                 TrackItem active = _queue.Find(t => t.VideoId == _currentTrack.VideoId && t.Title == _currentTrack.Title);
                 _queue.Clear();
                 if (active != null) _queue.Add(active);
+                _queueHoverRemoveIdx = -1;
+                RefreshQueueUI();
+                SaveCurrentConfig();
             }
             else
             {
                 _queue.Clear();
-                _player.Stop();
-                UpdatePlayButtonUI(false);
+                _queueHoverRemoveIdx = -1;
+                RefreshQueueUI();
+                LoadTrack(CreateEmptyTrack(), false);
             }
-            _queueHoverRemoveIdx = -1;
-            RefreshQueueUI();
         }
 
         private void RefreshQueueUI()
